@@ -10,9 +10,11 @@ from zoneinfo import ZoneInfo
 os.environ.setdefault("PGCLIENTENCODING", "utf8")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", force=True)
 
+# 環境変数名を一か所にまとめ、設定値の参照先を明確にする
 SLACK_WEBHOOK_ENV_VAR = "SLACK_WEBHOOK_URL"
 DB_DSN_TEMPLATE_ENV_VAR = "DB_DSN_TEMPLATE"
 
+# Slack Incoming Webhook にテキストと任意の Block Kit データを送信する
 def post_to_slack(webhook_url: str, text: str, blocks=None, timeout=10):
     payload = {"text": text}
     if blocks:
@@ -25,7 +27,9 @@ def post_to_slack(webhook_url: str, text: str, blocks=None, timeout=10):
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         resp.read()
 
+# 監視エラーを Slack の文字数制限に収まる Block Kit 形式へ整形する
 def build_slack_blocks(results_subset, jst_today_str: str):
+    # 長いメッセージを改行単位で複数のセクションへ分割する
     def chunk_text(s, limit=2800):
         out, cur, cur_len = [], [], 0
         for line in s.splitlines():
@@ -49,6 +53,7 @@ def build_slack_blocks(results_subset, jst_today_str: str):
     return [{"type": "section", "text": {"type": "mrkdwn", "text": header}}] + sections
 
 
+# 全チェック正常時に送る Slack メッセージを組み立てる
 def build_ok_slack_blocks(jst_today_str: str):
     header = f"データ監視アラート（{jst_today_str}）"
     return [
@@ -56,6 +61,7 @@ def build_ok_slack_blocks(jst_today_str: str):
         {"type": "section", "text": {"type": "mrkdwn", "text": "データは正常に取得されています。"}},
     ]
 
+# Slack のブロック数上限を避けるため、指定数ごとに分割して送信する
 def send_slack_batches(webhook_url: str, header_text: str, blocks: list, max_blocks=40):
     if not blocks:
         return
@@ -68,6 +74,7 @@ def send_slack_batches(webhook_url: str, header_text: str, blocks: list, max_blo
     if batch:
         post_to_slack(webhook_url, header_text, blocks=batch)
 
+# RDS IAM 認証トークンを生成し、SSL を使用して PostgreSQL へ接続する
 def connect_db(dsn: str):
     session = boto3.Session()
     client = session.client('rds')
@@ -76,6 +83,7 @@ def connect_db(dsn: str):
     conn.set_client_encoding('UTF8')
     return conn
 
+# 施設フィルタの無効指定を None などの未指定値と区別するための内部値
 FACILITY_FILTER_DISABLED = object()
 
 FACILITY_IDENTIFIER_KEYS = ("facility_id", "id", "code", "facility_code")
@@ -84,6 +92,7 @@ FACILITY_IDENTIFIER_KEYS = ("facility_id", "id", "code", "facility_code")
 FACILITY_COLUMN_FALLBACKS = {"facility_id": "facility_code", "facility_code": "facility_id"}
 
 
+# 施設設定で使用可能なキーを優先順に調べ、施設識別子を取得する
 def extract_facility_identifier(facility: Dict[str, Any]) -> Optional[str]:
     for key in FACILITY_IDENTIFIER_KEYS:
         value = facility.get(key)
@@ -92,6 +101,7 @@ def extract_facility_identifier(facility: Dict[str, Any]) -> Optional[str]:
     return None
 
 
+# 施設フィルタの値テンプレートで参照する施設情報を互換キー込みで作成する
 def build_facility_template_context(facility: Dict[str, Any]) -> Dict[str, Any]:
     ctx = dict(facility)
     identifier = extract_facility_identifier(facility)
@@ -104,6 +114,7 @@ def build_facility_template_context(facility: Dict[str, Any]) -> Dict[str, Any]:
     return ctx
 
 
+# 既定値、宿別の上書き値、旧形式の設定値を一つの施設フィルタ設定へ統合する
 def normalize_facility_filter_settings(
     base: Any,
     override: Any,
@@ -111,6 +122,7 @@ def normalize_facility_filter_settings(
     fallback_operator: Optional[str],
     fallback_template: Optional[str],
 ) -> Optional[Dict[str, Any]]:
+    # 文字列、リスト、辞書、無効値という複数の設定形式を共通形式へ変換する
     def coerce(settings: Any) -> Any:
         if settings is None:
             return None
@@ -165,6 +177,7 @@ def normalize_facility_filter_settings(
     return merged
 
 
+# 施設フィルタ設定からプレースホルダ付き SQL 条件句とパラメータを生成する
 def render_facility_clause(
     filter_settings: Optional[Dict[str, Any]],
     facility: Optional[Dict[str, Any]],
@@ -215,6 +228,7 @@ def render_facility_clause(
     return clause, [value]
 
 
+# 設定された施設列と互換列から、重複のない検索候補一覧を作成する
 def build_facility_column_candidates(column_setting: Any) -> List[str]:
     candidates: List[str] = []
 
@@ -243,6 +257,7 @@ def build_facility_column_candidates(column_setting: Any) -> List[str]:
     return unique_candidates
 
 
+# 対象テーブルの実在列を確認し、使用可能な施設フィルタ列を確定する
 def resolve_facility_filter_for_table(
     conn,
     schema: str,
@@ -280,6 +295,7 @@ def resolve_facility_filter_for_table(
     return None
 
 
+# 対象テーブルに当日分のレコードが存在するか、必要に応じ施設単位で確認する
 def has_rows_for_today(
     conn,
     schema: str,
@@ -303,6 +319,7 @@ def has_rows_for_today(
         return cur.fetchone() is not None
 
 
+# 対象テーブルから最新の作成日時を取得し、必要に応じ施設で絞り込む
 def latest_created_at(
     conn,
     schema: str,
@@ -324,6 +341,7 @@ def latest_created_at(
         row = cur.fetchone()
         return row[0] if row else None
 
+# 指定した S3 プレフィックス配下で、JST の当日に更新されたファイル数を数える
 def count_s3_files_today(s3_cli, bucket: str, prefix: str, today_jst: datetime) -> int:
     jst_start = datetime(today_jst.year, today_jst.month, today_jst.day, tzinfo=today_jst.tzinfo)
     jst_end = jst_start + timedelta(days=1)
@@ -338,6 +356,7 @@ def count_s3_files_today(s3_cli, bucket: str, prefix: str, today_jst: datetime) 
     return total
 
 
+# 宿別設定、環境変数、共通設定の優先順で Slack Webhook URL を解決する
 def resolve_slack_webhook(defaults: dict, prop: Optional[dict] = None) -> Optional[str]:
     prop = prop or {}
     return (
@@ -347,6 +366,7 @@ def resolve_slack_webhook(defaults: dict, prop: Optional[dict] = None) -> Option
     )
 
 
+# 宿の直接指定または共通テンプレートから DB 接続文字列を解決する
 def resolve_dsn(defaults: dict, prop: dict) -> Optional[str]:
     db = prop.get("db", {}) or {}
     dsn = db.get("dsn")
@@ -362,6 +382,7 @@ def resolve_dsn(defaults: dict, prop: dict) -> Optional[str]:
         return dsn_template.format(hotel_key=hotel_key)
     return None
 
+# 一つの宿について有効な DB・S3 監視を実行し、正常結果とエラーを集約する
 def run_checks_for_property(prop: dict, defaults: dict, tz: ZoneInfo, today: datetime) -> dict:
     name = prop.get("name", "UNKNOWN")
     enabled = prop.get("enabled", True)
@@ -382,6 +403,7 @@ def run_checks_for_property(prop: dict, defaults: dict, tz: ZoneInfo, today: dat
     checks_default = defaults.get("checks") or {}
     checks_prop = prop.get("checks") or {}
 
+    # 共通チェック設定を土台に宿別設定を上書きし、実行用設定を作成する
     checks: Dict[str, Any] = {}
     for key in set(checks_default.keys()) | set(checks_prop.keys()):
         default_cfg = checks_default.get(key)
@@ -409,6 +431,7 @@ def run_checks_for_property(prop: dict, defaults: dict, tz: ZoneInfo, today: dat
             merged_cfg["enabled"] = default_cfg.get("enabled")
 
         checks[key] = merged_cfg
+    # 文字列形式と辞書形式の施設定義を、共通の辞書形式へ正規化する
     raw_facilities = prop.get("facilities") or []
     facilities = []
     for idx, raw_fac in enumerate(raw_facilities, 1):
@@ -434,6 +457,7 @@ def run_checks_for_property(prop: dict, defaults: dict, tz: ZoneInfo, today: dat
                 f"施設定義{idx}: 不正な形式（{type(raw_fac).__name__}）。str もしくは dict を指定してください。"
             )
 
+    # 結果メッセージに表示する施設名または施設識別子を取得する
     def facility_label(fac: Optional[dict]) -> str:
         if not fac:
             return ""
@@ -443,6 +467,7 @@ def run_checks_for_property(prop: dict, defaults: dict, tz: ZoneInfo, today: dat
         identifier = extract_facility_identifier(fac)
         return identifier or "UNKNOWN"
 
+    # ① インポート対象テーブルに当日分のデータがあるかを確認する
     if (checks.get("import_tables") or {}).get("enabled", False):
         if not dsn:
             results["errors"].append("① DB接続情報(dsn)未設定のためチェック不可。")
@@ -472,6 +497,7 @@ def run_checks_for_property(prop: dict, defaults: dict, tz: ZoneInfo, today: dat
                         or cfg_import.get("facility_value_template")
                     )
 
+                    # 一つのテーブル・施設の組み合わせについて当日レコードを検査する
                     def run_import_check(
                         table_name: str,
                         date_col: str,
@@ -554,6 +580,7 @@ def run_checks_for_property(prop: dict, defaults: dict, tz: ZoneInfo, today: dat
                                 f"{prefix}: チェック失敗（{e.__class__.__name__}: {e}）"
                             )
 
+                    # テーブルごとの新旧設定形式を解釈し、施設単位または宿単位で検査する
                     for t in tables:
                         tname = None
                         try:
@@ -655,6 +682,7 @@ def run_checks_for_property(prop: dict, defaults: dict, tz: ZoneInfo, today: dat
                             )
             except Exception as e:
                 results["errors"].append(f"① DB接続失敗（{e.__class__.__name__}: {e}）")
+    # ② 当日更新された S3 ファイル数が必要件数を満たすか確認する
     if (checks.get("s3_uploads") or {}).get("enabled", False):
         if not bucket: results["errors"].append("② S3: bucket が未設定です。")
         if not hotel_key: results["errors"].append("② S3: hotel_key が未設定です。")
@@ -670,6 +698,7 @@ def run_checks_for_property(prop: dict, defaults: dict, tz: ZoneInfo, today: dat
                     results["ok"].append(f"② S3: OK（{cnt}件）")
             except Exception as e:
                 results["errors"].append(f"② S3チェック失敗（{e.__class__.__name__}: {e}）")
+    # ③ repeat_track_tags の最終更新から許容日数以上経過していないか確認する
     if (checks.get("repeat_track_tags_stall") or {}).get("enabled", False):
         if not dsn:
             results["errors"].append("③ DB接続情報(dsn)未設定のためチェック不可。")
@@ -680,6 +709,7 @@ def run_checks_for_property(prop: dict, defaults: dict, tz: ZoneInfo, today: dat
                     table = tcfg.get("table", "repeat_track_tags")
                     col = tcfg.get("created_at_column", "created_at")
                     max_days = int(tcfg.get("max_stall_days", 3))
+                    # 最新作成日時を現在時刻と比較し、更新停止の有無を判定する
                     def run_repeat_check():
                         prefix = f"③ {table}"
                         latest = latest_created_at(
@@ -713,6 +743,7 @@ def run_checks_for_property(prop: dict, defaults: dict, tz: ZoneInfo, today: dat
                 results["errors"].append(f"③ DB照会失敗（{e.__class__.__name__}: {e}）")
     return results
 
+# 自己診断用メッセージを送り、Slack Webhook の疎通を確認する
 def probe_slack(url: str):
     if not url or not isinstance(url, str) or not url.startswith("https://hooks.slack.com/services/"):
         return {"ok": False, "error": "invalid_url"}
@@ -722,6 +753,7 @@ def probe_slack(url: str):
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
+# ホスト名の名前解決と指定ポートへの TCP 接続を確認する
 def probe_dns(host: str, port: int = 443):
     try:
         socket.gethostbyname(host)
@@ -730,6 +762,7 @@ def probe_dns(host: str, port: int = 443):
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
+# 指定した S3 のバケットとプレフィックスを最小件数で一覧取得できるか確認する
 def probe_s3(bucket: str, prefix: str):
     try:
         s3 = boto3.client("s3")
@@ -739,6 +772,7 @@ def probe_s3(bucket: str, prefix: str):
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
+# DB に接続して SELECT 1 を実行し、接続とクエリ実行を確認する
 def probe_db(dsn: str):
     if not dsn:
         return {"ok": False, "error": "dsn_empty"}
@@ -751,6 +785,7 @@ def probe_db(dsn: str):
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
+# YAML 設定を UTF-8 で読み込み、文字コードエラー時は cp932 で再読込する
 def load_config(config_path: str) -> dict:
     try:
         with open(config_path, "r", encoding="utf-8-sig") as f:
@@ -762,6 +797,7 @@ def load_config(config_path: str) -> dict:
         return cfg
 
 
+# 設定読込、各種実行モード、宿ごとの監視、Slack 通知を統括する
 def run_monitor(
     config_path: str = "config.yaml",
     dry_run: bool = False,
@@ -787,6 +823,7 @@ def run_monitor(
     global_slack = resolve_slack_webhook(defaults)
     print(f"PROPERTIES: {len(props)}")
 
+    # 自己診断モードでは共通の Slack・S3・DB 接続を一件ずつ検査する
     if self_test:
         checks = []
         host = "hooks.slack.com"
@@ -812,6 +849,7 @@ def run_monitor(
         print("RESULT: SELF_TEST_DONE")
         return {"result": "SELF_TEST_DONE", "exit_code": 0, "self_test": checks}
 
+    # 全接続診断モードでは各宿の Slack・DB・S3 をまとめて検査する
     if probe_all:
         report = []
         s3d = defaults.get("s3") or {}
@@ -834,6 +872,7 @@ def run_monitor(
         print("RESULT: PROBE_DONE")
         return {"result": "PROBE_DONE", "exit_code": 0, "probe_all": report}
 
+    # 通常監視モードでは全宿のチェック結果とエラー有無を集約する
     all_results, any_error = [], False
     for p in props:
         res = run_checks_for_property(p, defaults, tz, today)
@@ -841,6 +880,7 @@ def run_monitor(
         if res["errors"]:
             any_error = True
 
+    # ドライランでは通知せず、検査結果と終了コードだけを返す
     if dry_run:
         result = "ERROR" if any_error else "OK"
         print(json.dumps(all_results, ensure_ascii=False, indent=2))
@@ -849,6 +889,7 @@ def run_monitor(
             raise RuntimeError("monitor dry-run detected errors")
         return {"result": result, "exit_code": 1 if any_error else 0, "results": all_results}
 
+    # エラー発生時は Webhook ごとに対象宿をまとめてアラートを送信する
     if any_error:
         url_to_subset = {}
         for r in all_results:
@@ -877,6 +918,7 @@ def run_monitor(
             raise RuntimeError(result)
         return {"result": result, "exit_code": 1, "results": all_results, "slack_sent": sent_any}
 
+    # 全件正常時は重複を除いた各 Webhook へ正常通知を送信する
     ok_urls = set()
     for r in all_results:
         url = r.get("_slack_webhook") or global_slack
@@ -895,6 +937,7 @@ def run_monitor(
     return {"result": "OK", "exit_code": 0, "results": all_results}
 
 
+# Lambda のイベントと環境変数から実行条件を組み立て、監視処理を呼び出す
 def lambda_handler(event, context):
     event = event or {}
     mode = event.get("mode", os.environ.get("MONITOR_MODE", "monitor"))
@@ -912,6 +955,7 @@ def lambda_handler(event, context):
     return response
 
 
+# コマンドライン引数とログ設定を解釈し、ローカル実行時の終了コードを返す
 def main():
     parser = argparse.ArgumentParser(description="宿ごとのデータ監視")
     parser.add_argument("-c", "--config", default="config.yaml")
@@ -935,6 +979,7 @@ def main():
     )
     return int(result.get("exit_code", 1))
 
+# スクリプトとして起動された場合のみ CLI を実行し、未処理例外を標準出力へ記録する
 if __name__ == "__main__":
     try:
         code = main()
