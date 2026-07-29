@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import os, sys, json, yaml, boto3, psycopg2, urllib.request, logging, argparse, traceback, copy
+import os, json, yaml, boto3, psycopg2, urllib.request, copy
 from typing import Optional, Tuple, List, Dict, Any
 from psycopg2 import sql
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 os.environ.setdefault("PGCLIENTENCODING", "utf8")
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", force=True)
 
 # 環境変数名を一か所にまとめ、設定値の参照先を明確にする
 SLACK_WEBHOOK_ENV_VAR = "SLACK_WEBHOOK_URL"
@@ -165,41 +164,12 @@ def render_facility_clause(
     if not column:
         return None, []
 
-    operator_raw = (filter_settings.get("operator") or "=").strip().lower()
     value_template = filter_settings.get("value_template") or "{facility_id}"
-    ctx = build_facility_template_context(facility)
-
-    try:
-        value = value_template.format(**ctx)
-    except Exception as e:
-        raise ValueError(f"value_template format error: {e}")
-
-    op_map = {
-        "=": "=",
-        "==": "=",
-        "eq": "=",
-        "!=": "!=",
-        "ne": "!=",
-        "<>": "!=",
-        "like": "LIKE",
-        "ilike": "ILIKE",
-    }
-
-    if operator_raw in ("startswith", "prefix"):
-        op_sql = "LIKE"
-        value = f"{value}%"
-    elif operator_raw in ("endswith", "suffix"):
-        op_sql = "LIKE"
-        value = f"%{value}"
-    elif operator_raw in ("contains", "substring"):
-        op_sql = "LIKE"
-        value = f"%{value}%"
-    else:
-        op_sql = op_map.get(operator_raw, operator_raw.upper())
+    value = value_template.format(**build_facility_template_context(facility))
 
     clause = sql.SQL("{col} {op} %s").format(
         col=sql.Identifier(column),
-        op=sql.SQL(op_sql),
+        op=sql.SQL("="),
     )
     return clause, [value]
 
@@ -700,141 +670,50 @@ def load_config(config_path: str) -> dict:
         return yaml.safe_load(f) or {}
 
 
-# 設定読込、各種実行モード、宿ごとの監視、Slack 通知を統括する
-def run_monitor(
-    config_path: str = "config.yaml",
-    dry_run: bool = False,
-    raise_on_monitor_error: bool = False,
-) -> dict:
-    print("START")
-    try:
-        cfg = load_config(config_path)
-    except Exception as e:
-        print(f"CONFIG_LOAD_ERROR: {e}")
-        print("RESULT: ERROR")
-        if raise_on_monitor_error:
-            raise
-        return {"result": "ERROR", "exit_code": 1, "error": f"CONFIG_LOAD_ERROR: {e}"}
-
+# 全宿の監視を実行し、結果を Slack へ通知する
+def run_monitor(config_path: str) -> dict:
+    cfg = load_config(config_path)
     defaults = cfg.get("defaults") or {}
-    props = cfg.get("properties") or []
+    properties = cfg.get("properties") or []
     tz = ZoneInfo(defaults.get("timezone", "Asia/Tokyo"))
     today = datetime.now(tz)
-    jst_today_str = today.strftime("%Y-%m-%d")
+    today_text = today.strftime("%Y-%m-%d")
     global_slack = resolve_slack_webhook(defaults)
-    print(f"PROPERTIES: {len(props)}")
 
-    # 通常監視モードでは全宿のチェック結果とエラー有無を集約する
-    all_results, any_error = [], False
-    for p in props:
-        res = run_checks_for_property(p, defaults, tz, today)
-        all_results.append(res)
-        if res["errors"]:
-            any_error = True
+    results = [
+        run_checks_for_property(prop, defaults, tz, today)
+        for prop in properties
+    ]
+    errors = [result for result in results if result["errors"]]
+    header_text = f"データ監視アラート（{today_text}）"
 
-    # ドライランでは通知せず、検査結果と終了コードだけを返す
-    if dry_run:
-        result = "ERROR" if any_error else "OK"
-        print(json.dumps(all_results, ensure_ascii=False, indent=2))
-        print(f"RESULT: {result}")
-        if any_error and raise_on_monitor_error:
-            raise RuntimeError("monitor dry-run detected errors")
-        return {"result": result, "exit_code": 1 if any_error else 0, "results": all_results}
+    if errors:
+        results_by_webhook = {}
+        for result in errors:
+            webhook = result.get("_slack_webhook") or global_slack
+            results_by_webhook.setdefault(webhook, []).append(result)
+        for webhook, webhook_results in results_by_webhook.items():
+            send_slack_batches(
+                webhook,
+                header_text,
+                build_slack_blocks(webhook_results, today_text),
+            )
+    else:
+        webhooks = {
+            result.get("_slack_webhook") or global_slack
+            for result in results
+        }
+        blocks = build_ok_slack_blocks(today_text)
+        for webhook in webhooks:
+            send_slack_batches(webhook, header_text, blocks)
 
-    # エラー発生時は Webhook ごとに対象宿をまとめてアラートを送信する
-    if any_error:
-        url_to_subset = {}
-        for r in all_results:
-            if not r["errors"]:
-                continue
-            url = r.get("_slack_webhook") or global_slack
-            if not url or not isinstance(url, str) or not url.startswith("https://hooks.slack.com/services/"):
-                logging.error(f"Slack Webhook不正のため送信不可: {r['property']}")
-                continue
-            url_to_subset.setdefault(url, []).append(r)
-        sent_any = False
-        header_text = f"データ監視アラート（{jst_today_str}）"
-        for url, subset in url_to_subset.items():
-            blocks = build_slack_blocks(subset, jst_today_str)
-            if not blocks:
-                continue
-            try:
-                send_slack_batches(url, header_text, blocks, max_blocks=40)
-                sent_any = True
-            except Exception as e:
-                logging.error(f"Slack送信失敗: {e}")
-        result = "ERROR_SENT" if sent_any else "ERROR_NO_SLACK"
-        print(json.dumps(all_results, ensure_ascii=False, indent=2))
-        print(f"RESULT: {result}")
-        if raise_on_monitor_error:
-            raise RuntimeError(result)
-        return {"result": result, "exit_code": 1, "results": all_results, "slack_sent": sent_any}
-
-    # 全件正常時は重複を除いた各 Webhook へ正常通知を送信する
-    ok_urls = set()
-    for r in all_results:
-        url = r.get("_slack_webhook") or global_slack
-        if not url or not isinstance(url, str) or not url.startswith("https://hooks.slack.com/services/"):
-            continue
-        ok_urls.add(url)
-    header_text = f"データ監視アラート（{jst_today_str}）"
-    ok_blocks = build_ok_slack_blocks(jst_today_str)
-    for url in ok_urls:
-        try:
-            send_slack_batches(url, header_text, ok_blocks, max_blocks=40)
-        except Exception as e:
-            logging.error(f"Slack送信失敗(OK通知): {e}")
-    print(json.dumps(all_results, ensure_ascii=False, indent=2))
-    print("RESULT: OK")
-    return {"result": "OK", "exit_code": 0, "results": all_results}
+    return {"result": "ERROR" if errors else "OK", "results": results}
 
 
-# Lambda のイベントと環境変数から実行条件を組み立て、監視処理を呼び出す
+# Lambda の定期実行エントリーポイント
 def lambda_handler(event, context):
-    event = event or {}
-    mode = event.get("mode", os.environ.get("MONITOR_MODE", "monitor"))
-    config_path = event.get("config_path") or os.environ.get("CONFIG_PATH") or os.path.join(
+    config_path = os.environ.get("CONFIG_PATH") or os.path.join(
         os.path.dirname(__file__),
         "config.yaml",
     )
-    response = run_monitor(
-        config_path=config_path,
-        dry_run=bool(event.get("dry_run") or mode == "dry_run"),
-        raise_on_monitor_error=os.environ.get("RAISE_ON_MONITOR_ERROR", "").lower() in ("1", "true", "yes"),
-    )
-    return response
-
-
-# コマンドライン引数とログ設定を解釈し、ローカル実行時の終了コードを返す
-def main():
-    parser = argparse.ArgumentParser(description="宿ごとのデータ監視")
-    parser.add_argument("-c", "--config", default="config.yaml")
-    parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--verbose", action="store_true")
-    parser.add_argument("--log-file", default="")
-    args = parser.parse_args()
-    if args.verbose:
-        logging.getLogger().setLevel(logging.DEBUG)
-    if args.log_file:
-        fh = logging.FileHandler(args.log_file, encoding="utf-8")
-        fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
-        logging.getLogger().addHandler(fh)
-    result = run_monitor(
-        config_path=args.config,
-        dry_run=args.dry_run,
-    )
-    return int(result.get("exit_code", 1))
-
-# スクリプトとして起動された場合のみ CLI を実行し、未処理例外を標準出力へ記録する
-if __name__ == "__main__":
-    try:
-        code = main()
-        sys.stdout.flush(); sys.stderr.flush()
-        raise SystemExit(code)
-    except SystemExit as e:
-        raise
-    except Exception as e:
-        print(f"UNCAUGHT: {e}")
-        traceback.print_exc()
-        print("RESULT: ERROR")
-        raise SystemExit(1)
+    return run_monitor(config_path)
