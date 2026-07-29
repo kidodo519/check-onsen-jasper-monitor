@@ -44,6 +44,17 @@ def connect_db(dsn: str):
     return connection
 
 
+# 宿別 DSN がなければ、従来どおり hotel_key を共通テンプレートへ埋め込む
+def resolve_dsn(prop: dict, defaults: dict) -> str:
+    direct_dsn = (prop.get("db") or {}).get("dsn")
+    if direct_dsn:
+        return direct_dsn
+    template = os.environ.get("DB_DSN_TEMPLATE") or (defaults.get("db") or {}).get("dsn_template")
+    if not template or not prop.get("hotel_key"):
+        raise ValueError("db.dsn または DB_DSN_TEMPLATE と hotel_key を設定してください")
+    return template.format(hotel_key=prop["hotel_key"])
+
+
 # 対象テーブルに当日分のレコードが存在するか確認する
 def has_rows_for_today(conn, schema: str, table: str, date_column: str, today: datetime) -> bool:
     with conn.cursor() as cursor:
@@ -90,15 +101,20 @@ def run_checks_for_property(prop: dict, defaults: dict, today: datetime) -> list
 
     name = prop.get("name", "UNKNOWN")
     db = prop.get("db") or {}
-    dsn = db.get("dsn")
     schema = db.get("schema", "public")
-    checks = prop.get("checks") or defaults.get("checks") or {}
+    default_checks = defaults.get("checks") or {}
+    property_checks = prop.get("checks") or {}
+    checks = {
+        key: {**(default_checks.get(key) or {}), **(property_checks.get(key) or {})}
+        for key in default_checks.keys() | property_checks.keys()
+    }
     errors = []
 
     # ① 各インポートテーブルに当日分のデータがあるか確認する
     import_config = checks.get("import_tables") or {}
     if import_config.get("enabled", False):
         try:
+            dsn = resolve_dsn(prop, defaults)
             with connect_db(dsn) as connection:
                 default_column = import_config.get("date_column", "import_date")
                 for table_config in import_config.get("tables", []):
@@ -134,6 +150,7 @@ def run_checks_for_property(prop: dict, defaults: dict, today: datetime) -> list
     repeat_config = checks.get("repeat_track_tags_stall") or {}
     if repeat_config.get("enabled", False):
         try:
+            dsn = resolve_dsn(prop, defaults)
             with connect_db(dsn) as connection:
                 table = repeat_config.get("table", "repeat_track_tags")
                 column = repeat_config.get("created_at_column", "created_at")
