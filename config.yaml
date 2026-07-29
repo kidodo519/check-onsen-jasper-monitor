@@ -1,0 +1,590 @@
+defaults:
+  timezone: "Asia/Tokyo"
+  s3:
+    bucket: "onsen-jasper-importer-prod-archive"
+    prefix_template: "{hotel_key}/pms-reservations/"
+    require_min_files: 1
+  checks:
+    import_tables:
+      enabled: true
+      date_column: "import_date"
+      facility_column:
+        - "facility_id"
+        - "facility_code"
+      facility_operator: "="
+      facility_value_template: "{facility_id}"
+    s3_uploads:
+      enabled: false
+      require_min_files: 1
+    repeat_track_tags_stall:
+      enabled: true
+      table: "repeat_track_tags"
+      created_at_column: "created_at"
+      max_stall_days: 3
+      facility_column: "facility_code"
+
+properties:
+  - name: "三晃商事"
+    enabled: true
+    hotel_key: "sankoh"
+    facilities:
+      - code: "1"
+        name: "夢乃井"
+      - code: "2"
+        name: "夕やけこやけ"
+      - code: "3"
+        name: "祥吉"
+      - code: "4"
+        name: "加里屋旅館Q"
+    db:
+      schema: "public"
+    checks:
+      import_tables:
+        enabled: true
+        date_column: "import_date"
+        tables:
+          - "pms_reservations_history"
+          - "pms_reservations_onhand"
+          - "pms_rooms_history"
+          - "pms_rooms_onhand"
+          - "pms_sales_history"
+          - "pms_sales_onhand"
+          - name: "enquetes"
+            facility_filter: false
+          - name: "booking_engine_customer"
+            facility_filter: false
+          - "booking_engine_reservations_history"
+          - "booking_engine_reservations_onhand"
+      s3_uploads:
+        enabled: true
+        require_min_files: 1
+      repeat_track_tags_stall:
+        enabled: true
+        table: "repeat_track_tags"
+        created_at_column: "created_at"
+        max_stall_days: 3
+
+  - name: "A&C"
+    enabled: true
+    hotel_key: "a_and_c"
+    facilities:
+      - code: "1"
+        name: "季譜の里"
+      - code: "2"
+        name: "ろ霞"
+    db:
+      schema: "public"
+    checks:
+      import_tables:
+        enabled: true
+        date_column: "import_date"
+        tables:
+          # - "pms_reservations_history"
+          # - "pms_reservations_onhand"
+          # - "pms_rooms_history"
+          # - "pms_rooms_onhand"
+          # - "pms_sales_history"
+          # - "pms_sales_onhand"          
+          - "enquetes"
+          - name: "booking_engine_customer"
+            facility_filter: false
+          - "booking_engine_reservations_history"
+          - "booking_engine_reservations_onhand"
+      s3_uploads:
+        enabled: true
+        require_min_files: 1
+      repeat_track_tags_stall:
+        enabled: true
+        table: "repeat_track_tags"
+        created_at_column: "created_at"
+        max_stall_days: 3
+
+  - name: "たちばなや"
+    enabled: true
+    hotel_key: "tachibanaya"
+    facilities:
+      - code: "1"
+        name: "たちばなや"
+    db:
+      schema: "public"
+    checks:
+      import_tables:
+        enabled: true
+        date_column: "import_date"
+        tables:
+          - "pms_reservations_history"
+          - "pms_reservations_onhand"
+          - "pms_rooms_history"
+          - "pms_rooms_onhand"
+          - "pms_sales_history"
+          - "pms_sales_onhand"          
+          - name: "enquetes"
+            facility_filter: false
+          - name: "booking_engine_customer"
+            facility_filter: false
+          - "booking_engine_reservations_history"
+          - "booking_engine_reservations_onhand"
+      s3_uploads:
+        enabled: true
+        require_min_files: 1
+      repeat_track_tags_stall:
+        enabled: true
+        table: "repeat_track_tags"
+        created_at_column: "created_at"
+        max_stall_days: 3
+
+  - name: "銀山荘"
+    enabled: true
+    hotel_key: "ginzansou"
+    facilities:
+      - code: "1"
+        name: "銀山荘"
+      - code: "2"
+        name: "古勢起屋本館"
+      - code: "3"
+        name: "古勢起屋別館"
+    db:
+      schema: "public"
+    checks:
+      import_tables:
+        enabled: true
+        date_column: "import_date"
+        tables:
+          - "pms_reservations_history"
+          - "pms_reservations_onhand"
+          - "pms_rooms_history"
+          - "pms_rooms_onhand"
+          - "pms_sales_history"
+          - "pms_sales_onhand"          
+          - name: "enquetes"
+            facility_filter: false
+          - name: "booking_engine_customer"
+            facility_filter: false
+          - "booking_engine_reservations_history"
+          - "booking_engine_reservations_onhand"
+      s3_uploads:
+        enabled: true
+        require_min_files: 1
+      repeat_track_tags_stall:
+        enabled: true
+        table: "repeat_track_tags"
+        created_at_column: "created_at"
+        max_stall_days: 3
+
+  - name: "サンシャイン鬼怒川"
+    enabled: true
+    hotel_key: "sunshine"
+    facilities:
+      - code: "1"
+        name: "ホテルサンシャイン鬼怒川"
+      - code: "2"
+        name: "栂の季"
+    db:
+      schema: "public"
+    checks:
+      import_tables:
+        enabled: true
+        date_column: "import_date"
+        tables:
+          # - "pms_reservations_history"
+          # - "pms_reservations_onhand"
+          # - "pms_rooms_history"
+          # - "pms_rooms_onhand"
+          # - "pms_sales_history"
+          # - "pms_sales_onhand"          
+          - "enquetes"
+          - name: "booking_engine_customer"
+            facility_filter: false
+          - "booking_engine_reservations_history"
+          - "booking_engine_reservations_onhand"
+      s3_uploads:
+        enabled: true
+        require_min_files: 1
+      repeat_track_tags_stall:
+        enabled: true
+        table: "repeat_track_tags"
+        created_at_column: "created_at"
+        max_stall_days: 3
+
+  - name: "八の坊"
+    enabled: true
+    hotel_key: "hachinobo"
+    facilities:
+      - code: "1"
+        name: "八の坊"
+    db:
+      schema: "public"
+    checks:
+      import_tables:
+        enabled: true
+        date_column: "import_date"
+        tables:
+          - "pms_reservations_history"
+          - "pms_reservations_onhand"
+          - "pms_rooms_history"
+          - "pms_rooms_onhand"
+          - "pms_sales_history"
+          - "pms_sales_onhand"          
+          - name: "enquetes"
+            facility_filter: false
+          - name: "enquetes_text"
+            facility_filter: false
+          - name: "booking_engine_customer"
+            facility_filter: false
+          - "booking_engine_reservations_history"
+          - "booking_engine_reservations_onhand"
+      s3_uploads:
+        enabled: true
+        require_min_files: 1
+      repeat_track_tags_stall:
+        enabled: true
+        table: "repeat_track_tags"
+        created_at_column: "created_at"
+        max_stall_days: 3
+
+  - name: "楓音"
+    enabled: true
+    hotel_key: "kanon"
+    facilities:
+      - code: "1"
+        name: "楓音"
+      - code: "2"
+        name: "ふじや"
+      - code: "3"
+        name: "紅葉"
+    db:
+      schema: "public"
+    checks:
+      import_tables:
+        enabled: true
+        date_column: "import_date"
+        tables:
+          # - "pms_reservations"
+          # - "pms_reservations_onhand"
+          # - "pms_rooms"
+          # - "pms_rooms_onhand"
+          # - "pms_sales"
+          # - "pms_sales_onhand"          
+          # - "enquetes"
+          - name: "booking_engine_customer"
+            facility_filter: false
+          - "booking_engine_reservations_history"
+          - "booking_engine_reservations_onhand"
+      s3_uploads:
+        enabled: true
+        require_min_files: 1
+      repeat_track_tags_stall:
+        enabled: true
+        table: "repeat_track_tags"
+        created_at_column: "created_at"
+        max_stall_days: 3
+
+  - name: "御所坊"
+    enabled: true
+    hotel_key: "goshobo"
+    facilities:
+      - code: "1"
+        name: "御所別墅"
+      - code: "2"
+        name: "御所坊"
+    db:
+      schema: "public"
+    checks:
+      import_tables:
+        enabled: true
+        date_column: "import_date"
+        tables:
+          - "pms_reservations_history"
+          - "pms_reservations_onhand"
+          - "pms_rooms_history"
+          - "pms_rooms_onhand"
+          - "pms_sales_history"
+          - "pms_sales_onhand"          
+          # - "enquetes"
+          - name: "enquetes"
+            facility_filter: false
+          - name: "booking_engine_customer"
+            facility_filter: false
+          - "booking_engine_reservations_history"
+          - "booking_engine_reservations_onhand"
+      s3_uploads:
+        enabled: true
+        require_min_files: 1
+      repeat_track_tags_stall:
+        enabled: false
+        table: "repeat_track_tags"
+        created_at_column: "created_at"
+        max_stall_days: 3
+
+  - name: "グランディア芳泉"
+    enabled: true
+    hotel_key: "grandia"
+    facilities:
+      - code: "1"
+        name: "グランディア芳泉"
+    db:
+      schema: "public"
+    checks:
+      import_tables:
+        enabled: true
+        date_column: "import_date"
+        tables:
+          - "pms_reservations_history"
+          - "pms_reservations_onhand"
+          - "pms_rooms_history"
+          - "pms_rooms_onhand"
+          - "pms_sales_history"
+          - "pms_sales_onhand"          
+          # - "enquetes"
+          # - name: "booking_engine_customer"
+          #   facility_filter: false
+          # - "booking_engine_reservations_history"
+          # - "booking_engine_reservations_onhand"
+      s3_uploads:
+        enabled: true
+        require_min_files: 1
+      repeat_track_tags_stall:
+        enabled: false
+        table: "repeat_track_tags"
+        created_at_column: "created_at"
+        max_stall_days: 3
+
+  - name: "柳生の庄"
+    enabled: true
+    hotel_key: "yagyunosyo"
+    facilities:
+      - code: "1"
+        name: "柳生の庄"
+    db:
+      schema: "public"
+    checks:
+      import_tables:
+        enabled: true
+        date_column: "import_date"
+        tables:
+          - "pms_reservations_history"
+          - "pms_reservations_onhand"
+          - "pms_rooms_history"
+          - "pms_rooms_onhand"
+          - "pms_sales_history"
+          - "pms_sales_onhand"          
+          # - "enquetes"
+          - name: "booking_engine_customer"
+            facility_filter: false
+          - "booking_engine_reservations_history"
+          - "booking_engine_reservations_onhand"
+      s3_uploads:
+        enabled: true
+        require_min_files: 1
+      repeat_track_tags_stall:
+        enabled: false
+        table: "repeat_track_tags"
+        created_at_column: "created_at"
+        max_stall_days: 3
+
+
+  - name: "あらや滔々庵"
+    enabled: true
+    hotel_key: "arayatotoan"
+    facilities:
+      - code: "1"
+        name: "あらや滔々庵"
+    db:
+      schema: "public"
+    checks:
+      import_tables:
+        enabled: true
+        date_column: "import_date"
+        tables:
+          - "pms_reservations_history"
+          - "pms_reservations_onhand"
+          - "pms_rooms_history"
+          - "pms_rooms_onhand"
+          - "pms_sales_history"
+          - "pms_sales_onhand"          
+          # - "enquetes"
+          # - name: "booking_engine_customer"
+          #   facility_filter: false
+          # - "booking_engine_reservations_history"
+          # - "booking_engine_reservations_onhand"
+      s3_uploads:
+        enabled: true
+        require_min_files: 1
+      repeat_track_tags_stall:
+        enabled: false
+        table: "repeat_track_tags"
+        created_at_column: "created_at"
+        max_stall_days: 3
+
+
+  - name: "御幸荘"
+    enabled: true
+    hotel_key: "miyukiso"
+    facilities:
+      - code: "1"
+        name: "御幸荘"
+      # - code: "2"
+      #   name: "小都里"
+    db:
+      schema: "public"
+    checks:
+      import_tables:
+        enabled: true
+        date_column: "import_date"
+        tables:
+          - "pms_reservations_history"
+          - "pms_reservations_onhand"
+          - "pms_rooms_history"
+          - "pms_rooms_onhand"
+          - "pms_sales_history"
+          - "pms_sales_onhand"          
+          # - "enquetes"
+          # - name: "booking_engine_customer"
+          #   facility_filter: false
+          # - "booking_engine_reservations_history"
+          # - "booking_engine_reservations_onhand"
+      s3_uploads:
+        enabled: true
+        require_min_files: 1
+      repeat_track_tags_stall:
+        enabled: false
+        table: "repeat_track_tags"
+        created_at_column: "created_at"
+        max_stall_days: 3
+
+
+  - name: "かたくらシルクホテル"
+    enabled: true
+    hotel_key: "katakura"
+    facilities:
+      - code: "1"
+        name: "かたくらシルクホテル"
+    db:
+      schema: "public"
+    checks:
+      import_tables:
+        enabled: true
+        date_column: "import_date"
+        tables:
+          - "pms_reservations_history"
+          - "pms_reservations_onhand"
+          - "pms_rooms_history"
+          - "pms_rooms_onhand"
+          - "pms_sales_history"
+          - "pms_sales_onhand"          
+          - "enquetes"
+          - "booking_engine_customer"
+          - "booking_engine_reservations_history"
+          - "booking_engine_reservations_onhand"
+      s3_uploads:
+        enabled: true
+        require_min_files: 1
+      repeat_track_tags_stall:
+        enabled: false
+        table: "repeat_track_tags"
+        created_at_column: "created_at"
+        max_stall_days: 3
+
+
+  - name: "ねぎや陵楓閣"
+    enabled: true
+    hotel_key: "negiya"
+    facilities:
+      - code: "1"
+        name: "ねぎや陵楓閣"
+    db:
+      schema: "public"
+    checks:
+      import_tables:
+        enabled: true
+        date_column: "import_date"
+        tables:
+          - "pms_reservations_history"
+          - "pms_reservations_onhand"
+          - "pms_rooms_history"
+          - "pms_rooms_onhand"
+          - "pms_sales_history"
+          - "pms_sales_onhand"          
+          # - "enquetes"
+          # - "booking_engine_customer"
+          # - "booking_engine_reservations_history"
+          # - "booking_engine_reservations_onhand"
+      s3_uploads:
+        enabled: true
+        require_min_files: 1
+      repeat_track_tags_stall:
+        enabled: false
+        table: "repeat_track_tags"
+        created_at_column: "created_at"
+        max_stall_days: 3
+
+
+  - name: "遠鉄観光開発"
+    enabled: true
+    hotel_key: "entetsu"
+    facilities:
+      - code: "1"
+        name: "ウェルシーズン浜名湖"
+      - code: "6"
+        name: "コンコルド浜松"
+    db:
+      schema: "public"
+    checks:
+      import_tables:
+        enabled: true
+        date_column: "import_date"
+        tables:
+          - "pms_reservations_history"
+          - "pms_reservations_onhand"
+          - "pms_rooms_history"
+          - "pms_rooms_onhand"
+          - "pms_sales_history"
+          - "pms_sales_onhand"          
+          # - "enquetes"
+          # - name: "enquetes"
+          #   facility_filter: false
+          # - name: "booking_engine_customer"
+          #   facility_filter: false
+          - "booking_engine_reservations_history"
+          - "booking_engine_reservations_onhand"
+      s3_uploads:
+        enabled: true
+        require_min_files: 1
+      repeat_track_tags_stall:
+        enabled: false
+        table: "repeat_track_tags"
+        created_at_column: "created_at"
+        max_stall_days: 3
+
+
+  - name: "季さら"
+    enabled: true
+    hotel_key: "kisara"
+    facilities:
+      - code: "1"
+        name: "季さら"
+    db:
+      schema: "public"
+    checks:
+      import_tables:
+        enabled: true
+        date_column: "import_date"
+        tables:
+          - "pms_reservations_history"
+          - "pms_reservations_onhand"
+          - "pms_rooms_history"
+          - "pms_rooms_onhand"
+          - "pms_sales_history"
+          - "pms_sales_onhand"          
+          # - "enquetes"
+          # - "booking_engine_customer"
+          # - "booking_engine_reservations_history"
+          # - "booking_engine_reservations_onhand"
+      s3_uploads:
+        enabled: true
+        require_min_files: 1
+      repeat_track_tags_stall:
+        enabled: false
+        table: "repeat_track_tags"
+        created_at_column: "created_at"
+        max_stall_days: 3
