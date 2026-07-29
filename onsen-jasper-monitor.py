@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import os, sys, json, yaml, boto3, psycopg2, urllib.request, urllib.error, logging, argparse, traceback, socket, copy
+import os, sys, json, yaml, boto3, psycopg2, urllib.request, logging, argparse, traceback, copy
 from typing import Optional, Tuple, List, Dict, Any
 from psycopg2 import sql
 from datetime import datetime, timedelta, timezone
@@ -15,7 +15,7 @@ SLACK_WEBHOOK_ENV_VAR = "SLACK_WEBHOOK_URL"
 DB_DSN_TEMPLATE_ENV_VAR = "DB_DSN_TEMPLATE"
 
 # Slack Incoming Webhook にテキストと任意の Block Kit データを送信する
-def post_to_slack(webhook_url: str, text: str, blocks=None, timeout=10):
+def post_to_slack(webhook_url: str, text: str, blocks=None):
     payload = {"text": text}
     if blocks:
         payload["blocks"] = blocks
@@ -24,8 +24,7 @@ def post_to_slack(webhook_url: str, text: str, blocks=None, timeout=10):
         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
         headers={"Content-Type": "application/json"},
     )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        resp.read()
+    urllib.request.urlopen(req, timeout=10).close()
 
 # 監視エラーを Slack の文字数制限に収まる Block Kit 形式へ整形する
 def build_slack_blocks(results_subset, jst_today_str: str):
@@ -83,35 +82,12 @@ def connect_db(dsn: str):
     conn.set_client_encoding('UTF8')
     return conn
 
-# 施設フィルタの無効指定を None などの未指定値と区別するための内部値
 FACILITY_FILTER_DISABLED = object()
-
-FACILITY_IDENTIFIER_KEYS = ("facility_id", "id", "code", "facility_code")
-
-
 FACILITY_COLUMN_FALLBACKS = {"facility_id": "facility_code", "facility_code": "facility_id"}
 
 
-# 施設設定で使用可能なキーを優先順に調べ、施設識別子を取得する
-def extract_facility_identifier(facility: Dict[str, Any]) -> Optional[str]:
-    for key in FACILITY_IDENTIFIER_KEYS:
-        value = facility.get(key)
-        if value is not None and str(value) != "":
-            return str(value)
-    return None
-
-
-# 施設フィルタの値テンプレートで参照する施設情報を互換キー込みで作成する
 def build_facility_template_context(facility: Dict[str, Any]) -> Dict[str, Any]:
-    ctx = dict(facility)
-    identifier = extract_facility_identifier(facility)
-    name = facility.get("name") or facility.get("facility_name")
-    # facility_code は将来的に廃止予定だが、既存設定互換のため当面残す
-    for key in FACILITY_IDENTIFIER_KEYS:
-        ctx.setdefault(key, identifier)
-    ctx.setdefault("name", name)
-    ctx.setdefault("facility_name", name)
-    return ctx
+    return {**facility, "facility_id": facility["code"]}
 
 
 # 既定値、宿別の上書き値、旧形式の設定値を一つの施設フィルタ設定へ統合する
@@ -431,31 +407,7 @@ def run_checks_for_property(prop: dict, defaults: dict, tz: ZoneInfo, today: dat
             merged_cfg["enabled"] = default_cfg.get("enabled")
 
         checks[key] = merged_cfg
-    # 文字列形式と辞書形式の施設定義を、共通の辞書形式へ正規化する
-    raw_facilities = prop.get("facilities") or []
-    facilities = []
-    for idx, raw_fac in enumerate(raw_facilities, 1):
-        if isinstance(raw_fac, str):
-            facilities.append({"facility_id": raw_fac, "code": raw_fac, "name": raw_fac, "enabled": True})
-        elif isinstance(raw_fac, dict):
-            identifier = extract_facility_identifier(raw_fac)
-            if not identifier:
-                results["errors"].append(
-                    f"施設定義{idx}: facility_id(id/code/facility_code)が未設定のためスキップ。"
-                )
-                continue
-            facilities.append(
-                {
-                    "facility_id": identifier,
-                    "code": raw_fac.get("code") or raw_fac.get("facility_code") or identifier,
-                    "name": raw_fac.get("name") or identifier,
-                    "enabled": raw_fac.get("enabled", True),
-                }
-            )
-        else:
-            results["errors"].append(
-                f"施設定義{idx}: 不正な形式（{type(raw_fac).__name__}）。str もしくは dict を指定してください。"
-            )
+    facilities = prop.get("facilities") or []
 
     # 結果メッセージに表示する施設名または施設識別子を取得する
     def facility_label(fac: Optional[dict]) -> str:
@@ -464,8 +416,7 @@ def run_checks_for_property(prop: dict, defaults: dict, tz: ZoneInfo, today: dat
         name = fac.get("name")
         if name:
             return name
-        identifier = extract_facility_identifier(fac)
-        return identifier or "UNKNOWN"
+        return str(fac["code"])
 
     # ① インポート対象テーブルに当日分のデータがあるかを確認する
     if (checks.get("import_tables") or {}).get("enabled", False):
@@ -743,66 +694,16 @@ def run_checks_for_property(prop: dict, defaults: dict, tz: ZoneInfo, today: dat
                 results["errors"].append(f"③ DB照会失敗（{e.__class__.__name__}: {e}）")
     return results
 
-# 自己診断用メッセージを送り、Slack Webhook の疎通を確認する
-def probe_slack(url: str):
-    if not url or not isinstance(url, str) or not url.startswith("https://hooks.slack.com/services/"):
-        return {"ok": False, "error": "invalid_url"}
-    try:
-        post_to_slack(url, "monitor self-test", [{"type": "section", "text": {"type": "mrkdwn", "text": "self-test"}}], timeout=5)
-        return {"ok": True}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
-
-# ホスト名の名前解決と指定ポートへの TCP 接続を確認する
-def probe_dns(host: str, port: int = 443):
-    try:
-        socket.gethostbyname(host)
-        with socket.create_connection((host, port), timeout=5) as s:
-            return {"ok": True}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
-
-# 指定した S3 のバケットとプレフィックスを最小件数で一覧取得できるか確認する
-def probe_s3(bucket: str, prefix: str):
-    try:
-        s3 = boto3.client("s3")
-        resp = s3.list_objects_v2(Bucket=bucket, Prefix=prefix, MaxKeys=1)
-        found = resp.get("KeyCount", 0)
-        return {"ok": True, "key_count": found}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
-
-# DB に接続して SELECT 1 を実行し、接続とクエリ実行を確認する
-def probe_db(dsn: str):
-    if not dsn:
-        return {"ok": False, "error": "dsn_empty"}
-    try:
-        with connect_db(dsn) as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT 1")
-                cur.fetchone()
-        return {"ok": True}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
-
-# YAML 設定を UTF-8 で読み込み、文字コードエラー時は cp932 で再読込する
+# YAML 設定を UTF-8 で読み込む
 def load_config(config_path: str) -> dict:
-    try:
-        with open(config_path, "r", encoding="utf-8-sig") as f:
-            return yaml.safe_load(f) or {}
-    except UnicodeDecodeError:
-        with open(config_path, "r", encoding="cp932") as f:
-            cfg = yaml.safe_load(f) or {}
-        logging.warning("config.yaml を cp932 で読み込みました。可能なら UTF-8 で保存してください。")
-        return cfg
+    with open(config_path, "r", encoding="utf-8-sig") as f:
+        return yaml.safe_load(f) or {}
 
 
 # 設定読込、各種実行モード、宿ごとの監視、Slack 通知を統括する
 def run_monitor(
     config_path: str = "config.yaml",
     dry_run: bool = False,
-    self_test: bool = False,
-    probe_all: bool = False,
     raise_on_monitor_error: bool = False,
 ) -> dict:
     print("START")
@@ -822,55 +723,6 @@ def run_monitor(
     jst_today_str = today.strftime("%Y-%m-%d")
     global_slack = resolve_slack_webhook(defaults)
     print(f"PROPERTIES: {len(props)}")
-
-    # 自己診断モードでは共通の Slack・S3・DB 接続を一件ずつ検査する
-    if self_test:
-        checks = []
-        host = "hooks.slack.com"
-        checks.append({"slack_dns": probe_dns(host)})
-        checks.append({"slack_probe": probe_slack(global_slack)})
-        s3d = defaults.get("s3") or {}
-        if s3d:
-            bucket = s3d.get("bucket"); tpl = s3d.get("prefix_template", "{hotel_key}/pms-reservations/")
-            if props:
-                hk = props[0].get("hotel_key")
-                prefix = tpl.format(hotel_key=hk) if hk else tpl
-                checks.append({"s3_probe": probe_s3(bucket, prefix)})
-        for p in props[:1]:
-            dsn = resolve_dsn(defaults, p)
-            checks.append({"db_probe": probe_db(dsn)})
-        print(json.dumps({"self_test": checks}, ensure_ascii=False, indent=2))
-        if global_slack and isinstance(global_slack, str) and global_slack.startswith("https://hooks.slack.com/services/"):
-            try:
-                post_to_slack(global_slack, "monitor self-test", [{"type": "section", "text": {"type": "mrkdwn", "text": "self-test ok"}}])
-                print("SELF_TEST_SLACK: SENT")
-            except Exception as e:
-                print(f"SELF_TEST_SLACK: FAIL {e}")
-        print("RESULT: SELF_TEST_DONE")
-        return {"result": "SELF_TEST_DONE", "exit_code": 0, "self_test": checks}
-
-    # 全接続診断モードでは各宿の Slack・DB・S3 をまとめて検査する
-    if probe_all:
-        report = []
-        s3d = defaults.get("s3") or {}
-        for p in props:
-            name = p.get("name", "UNKNOWN")
-            hk = p.get("hotel_key")
-            dsn = resolve_dsn(defaults, p)
-            bucket = s3d.get("bucket"); tpl = s3d.get("prefix_template", "{hotel_key}/pms-reservations/")
-            prefix = tpl.format(hotel_key=hk) if hk else tpl
-            url = resolve_slack_webhook(defaults, p)
-            item = {
-                "property": name,
-                "slack_url_valid": bool(url and isinstance(url, str) and url.startswith("https://hooks.slack.com/services/")),
-                "slack_probe": probe_slack(url) if url else {"ok": False, "error": "no_url"},
-                "db_probe": probe_db(dsn),
-                "s3_probe": probe_s3(bucket, prefix) if bucket else {"ok": False, "error": "no_bucket"},
-            }
-            report.append(item)
-        print(json.dumps({"probe_all": report}, ensure_ascii=False, indent=2))
-        print("RESULT: PROBE_DONE")
-        return {"result": "PROBE_DONE", "exit_code": 0, "probe_all": report}
 
     # 通常監視モードでは全宿のチェック結果とエラー有無を集約する
     all_results, any_error = [], False
@@ -948,8 +800,6 @@ def lambda_handler(event, context):
     response = run_monitor(
         config_path=config_path,
         dry_run=bool(event.get("dry_run") or mode == "dry_run"),
-        self_test=bool(event.get("self_test") or mode == "self_test"),
-        probe_all=bool(event.get("probe_all") or mode == "probe_all"),
         raise_on_monitor_error=os.environ.get("RAISE_ON_MONITOR_ERROR", "").lower() in ("1", "true", "yes"),
     )
     return response
@@ -962,8 +812,6 @@ def main():
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--log-file", default="")
-    parser.add_argument("--self-test", action="store_true")
-    parser.add_argument("--probe-all", action="store_true")
     args = parser.parse_args()
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
@@ -974,8 +822,6 @@ def main():
     result = run_monitor(
         config_path=args.config,
         dry_run=args.dry_run,
-        self_test=args.self_test,
-        probe_all=args.probe_all,
     )
     return int(result.get("exit_code", 1))
 
