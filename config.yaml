@@ -1,9 +1,5 @@
 defaults:
   timezone: "Asia/Tokyo"
-  s3:
-    bucket: "onsen-jasper-importer-prod-archive"
-    prefix_template: "{hotel_key}/pms-reservations/"
-    require_min_files: 1
   checks:
     import_tables:
       enabled: true
@@ -11,11 +7,7 @@ defaults:
       facility_column:
         - "facility_id"
         - "facility_code"
-      facility_operator: "="
       facility_value_template: "{facility_id}"
-    s3_uploads:
-      enabled: false
-      require_min_files: 1
     repeat_track_tags_stall:
       enabled: true
       table: "repeat_track_tags"
@@ -55,9 +47,6 @@ properties:
             facility_filter: false
           - "booking_engine_reservations_history"
           - "booking_engine_reservations_onhand"
-      s3_uploads:
-        enabled: true
-        require_min_files: 1
       repeat_track_tags_stall:
         enabled: true
         table: "repeat_track_tags"
@@ -90,9 +79,6 @@ properties:
             facility_filter: false
           - "booking_engine_reservations_history"
           - "booking_engine_reservations_onhand"
-      s3_uploads:
-        enabled: true
-        require_min_files: 1
       repeat_track_tags_stall:
         enabled: true
         table: "repeat_track_tags"
@@ -124,9 +110,6 @@ properties:
             facility_filter: false
           - "booking_engine_reservations_history"
           - "booking_engine_reservations_onhand"
-      s3_uploads:
-        enabled: true
-        require_min_files: 1
       repeat_track_tags_stall:
         enabled: true
         table: "repeat_track_tags"
@@ -162,9 +145,6 @@ properties:
             facility_filter: false
           - "booking_engine_reservations_history"
           - "booking_engine_reservations_onhand"
-      s3_uploads:
-        enabled: true
-        require_min_files: 1
       repeat_track_tags_stall:
         enabled: true
         table: "repeat_track_tags"
@@ -197,9 +177,6 @@ properties:
             facility_filter: false
           - "booking_engine_reservations_history"
           - "booking_engine_reservations_onhand"
-      s3_uploads:
-        enabled: true
-        require_min_files: 1
       repeat_track_tags_stall:
         enabled: true
         table: "repeat_track_tags"
@@ -233,9 +210,6 @@ properties:
             facility_filter: false
           - "booking_engine_reservations_history"
           - "booking_engine_reservations_onhand"
-      s3_uploads:
-        enabled: true
-        require_min_files: 1
       repeat_track_tags_stall:
         enabled: true
         table: "repeat_track_tags"
@@ -270,9 +244,6 @@ properties:
             facility_filter: false
           - "booking_engine_reservations_history"
           - "booking_engine_reservations_onhand"
-      s3_uploads:
-        enabled: true
-        require_min_files: 1
       repeat_track_tags_stall:
         enabled: true
         table: "repeat_track_tags"
@@ -307,9 +278,6 @@ properties:
             facility_filter: false
           - "booking_engine_reservations_history"
           - "booking_engine_reservations_onhand"
-      s3_uploads:
-        enabled: true
-        require_min_files: 1
       repeat_track_tags_stall:
         enabled: false
         table: "repeat_track_tags"
@@ -340,9 +308,6 @@ properties:
           #   facility_filter: false
           # - "booking_engine_reservations_history"
           # - "booking_engine_reservations_onhand"
-      s3_uploads:
-        enabled: true
-        require_min_files: 1
       repeat_track_tags_stall:
         enabled: false
         table: "repeat_track_tags"
@@ -373,9 +338,6 @@ properties:
             facility_filter: false
           - "booking_engine_reservations_history"
           - "booking_engine_reservations_onhand"
-      s3_uploads:
-        enabled: true
-        require_min_files: 1
       repeat_track_tags_stall:
         enabled: false
         table: "repeat_track_tags"
@@ -407,9 +369,6 @@ properties:
           #   facility_filter: false
           # - "booking_engine_reservations_history"
           # - "booking_engine_reservations_onhand"
-      s3_uploads:
-        enabled: true
-        require_min_files: 1
       repeat_track_tags_stall:
         enabled: false
         table: "repeat_track_tags"
@@ -443,9 +402,6 @@ properties:
           #   facility_filter: false
           # - "booking_engine_reservations_history"
           # - "booking_engine_reservations_onhand"
-      s3_uploads:
-        enabled: true
-        require_min_files: 1
       repeat_track_tags_stall:
         enabled: false
         table: "repeat_track_tags"
@@ -476,9 +432,6 @@ properties:
           - "booking_engine_customer"
           - "booking_engine_reservations_history"
           - "booking_engine_reservations_onhand"
-      s3_uploads:
-        enabled: true
-        require_min_files: 1
       repeat_track_tags_stall:
         enabled: false
         table: "repeat_track_tags"
@@ -509,9 +462,6 @@ properties:
           # - "booking_engine_customer"
           # - "booking_engine_reservations_history"
           # - "booking_engine_reservations_onhand"
-      s3_uploads:
-        enabled: true
-        require_min_files: 1
       repeat_track_tags_stall:
         enabled: false
         table: "repeat_track_tags"
@@ -547,9 +497,6 @@ properties:
           #   facility_filter: false
           - "booking_engine_reservations_history"
           - "booking_engine_reservations_onhand"
-      s3_uploads:
-        enabled: true
-        require_min_files: 1
       repeat_track_tags_stall:
         enabled: false
         table: "repeat_track_tags"
@@ -580,9 +527,6 @@ properties:
           # - "booking_engine_customer"
           # - "booking_engine_reservations_history"
           # - "booking_engine_reservations_onhand"
-      s3_uploads:
-        enabled: true
-        require_min_files: 1
       repeat_track_tags_stall:
         enabled: false
         table: "repeat_track_tags"
